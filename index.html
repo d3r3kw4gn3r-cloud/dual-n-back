@@ -97,4 +97,423 @@
     border-radius: 14px;
     background: var(--surface);
     border: 1px solid var(--border);
-    transition:
+    transition: background 0.08s, border-color 0.08s, transform 0.08s;
+  }
+  .cell.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: scale(1.04);
+    box-shadow: 0 0 24px rgba(79,142,247,0.4);
+  }
+  #speed-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 2px;
+  }
+  #speed-row label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
+  #speed-slider { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
+  #speed-val { font-size: 13px; font-weight: 600; color: var(--accent); min-width: 36px; text-align: right; }
+  #btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .resp-btn {
+    padding: 0;
+    height: 68px;
+    border-radius: 14px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    transition: background 0.1s, border-color 0.1s, transform 0.08s;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .resp-btn .btn-sub { font-size: 10px; color: var(--muted); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+  .resp-btn.pressed { transform: scale(0.95); background: var(--surface2); }
+  .resp-btn.hit { background: rgba(46,204,113,0.18); border-color: var(--accent2); color: var(--accent2); }
+  .resp-btn.hit .btn-sub { color: var(--accent2); opacity: 0.7; }
+  .resp-btn.miss { background: rgba(231,76,60,0.15); border-color: var(--danger); color: var(--danger); }
+  .resp-btn.miss .btn-sub { color: var(--danger); opacity: 0.7; }
+  .resp-btn.disabled-state { opacity: 0.35; pointer-events: none; }
+  #feedback {
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 18px;
+    padding: 0 8px;
+  }
+  #trial-info { text-align: center; font-size: 12px; color: var(--muted); min-height: 16px; }
+  #start-btn {
+    width: 100%;
+    height: 54px;
+    border-radius: 14px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  #start-btn:active { transform: scale(0.98); opacity: 0.9; }
+  #start-btn.disabled-state { opacity: 0.4; pointer-events: none; }
+  #fs-btn {
+    position: fixed;
+    top: 10px; right: 10px;
+    width: 32px; height: 32px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<button id="fs-btn" aria-label="Toggle fullscreen">⛶</button>
+
+<div id="app">
+  <div id="header">
+    <span id="title">Dual N-Back</span>
+    <div id="level-row">
+      <button class="lvl-btn" id="lvl-down">−</button>
+      <span id="level-label">2-back</span>
+      <button class="lvl-btn" id="lvl-up">+</button>
+    </div>
+  </div>
+  <div id="scores">
+    <div class="score-card">
+      <span class="score-label">Position</span>
+      <span class="score-val" id="pos-score">—</span>
+    </div>
+    <div class="score-card">
+      <span class="score-label">Audio</span>
+      <span class="score-val" id="aud-score">—</span>
+    </div>
+  </div>
+  <div id="letter-wrap">
+    <div id="letter-display" class="blank">—</div>
+  </div>
+  <div id="grid-wrap">
+    <div id="grid"></div>
+  </div>
+  <div id="speed-row">
+    <label for="speed-slider">Speed</label>
+    <input type="range" id="speed-slider" min="1" max="5" step="1" value="3">
+    <span id="speed-val">Normal</span>
+  </div>
+  <div id="trial-info"></div>
+  <div id="feedback"></div>
+  <div id="btns">
+    <button class="resp-btn disabled-state" id="pos-btn">
+      <span>Position</span>
+      <span class="btn-sub">tap if match</span>
+    </button>
+    <button class="resp-btn disabled-state" id="aud-btn">
+      <span>Audio</span>
+      <span class="btn-sub">tap if match</span>
+    </button>
+  </div>
+  <button id="start-btn">Start</button>
+</div>
+
+<script>
+const LETTERS = ['Alpha','Bravo','Charlie','Delta','Foxtrot','Golf','Hotel','Kilo','Oscar','Tango'];
+const BLANK_MS = 400;
+const TRIALS = 20;
+const SPEED_DURATIONS = [3500, 3000, 2500, 2000, 1500];
+const SPEED_LABELS = ['Slow', 'Easy', 'Normal', 'Fast', 'Hard'];
+
+let n = 2;
+let speedIdx = 2;
+let trialMs = SPEED_DURATIONS[speedIdx];
+let sequence = [];
+let trial = 0;
+let posPressed = false, audPressed = false;
+let posCorrect = 0, audCorrect = 0, posTotal = 0, audTotal = 0;
+let running = false;
+let timer = null;
+let preferredVoice = null;
+
+const $ = id => document.getElementById(id);
+const gridEl = $('grid');
+const letterEl = $('letter-display');
+const feedback = $('feedback');
+const trialInfo = $('trial-info');
+const posBtn = $('pos-btn');
+const audBtn = $('aud-btn');
+const startBtn = $('start-btn');
+const posScore = $('pos-score');
+const audScore = $('aud-score');
+const lvlUp = $('lvl-up');
+const lvlDown = $('lvl-down');
+const levelLabel = $('level-label');
+const speedSlider = $('speed-slider');
+const speedVal = $('speed-val');
+
+for (let i = 0; i < 9; i++) {
+  const c = document.createElement('div');
+  c.className = 'cell';
+  c.id = 'c' + i;
+  gridEl.appendChild(c);
+}
+
+function pickVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  const priority = [
+    v => v.name === 'Google UK English Female',
+    v => v.name === 'Google US English',
+    v => v.name.includes('Samantha'),
+    v => v.lang === 'en-GB' && !v.name.includes('Google'),
+    v => v.lang === 'en-US' && !v.name.includes('Google'),
+    v => v.lang.startsWith('en'),
+  ];
+  for (const test of priority) {
+    const match = voices.find(test);
+    if (match) return match;
+  }
+  return voices[0];
+}
+
+function initVoices() {
+  preferredVoice = pickVoice();
+  if (!preferredVoice) {
+    window.speechSynthesis.onvoiceschanged = () => { preferredVoice = pickVoice(); };
+  }
+}
+initVoices();
+
+function speak(letter) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(letter);
+  if (preferredVoice) u.voice = preferredVoice;
+  u.rate = 1.0;
+  u.pitch = 1.0;
+  u.volume = 1;
+  window.speechSynthesis.speak(u);
+}
+
+function beep(correct) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = correct ? 880 : 200;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.15);
+    setTimeout(() => ctx.close(), 300);
+  } catch(e) {}
+}
+
+speedSlider.addEventListener('input', () => {
+  speedIdx = parseInt(speedSlider.value) - 1;
+  trialMs = SPEED_DURATIONS[speedIdx];
+  speedVal.textContent = SPEED_LABELS[speedIdx];
+});
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function buildSequence() {
+  const seq = [];
+  for (let i = 0; i < TRIALS; i++) {
+    seq.push({
+      pos: Math.floor(Math.random() * 9),
+      letter: LETTERS[Math.floor(Math.random() * LETTERS.length)]
+    });
+  }
+  const eligible = [];
+  for (let i = n; i < TRIALS; i++) eligible.push(i);
+  const matchCount = Math.round(eligible.length * 0.3);
+  const posMatches = shuffle([...eligible]).slice(0, matchCount);
+  const audMatches = shuffle([...eligible]).slice(0, matchCount);
+  posMatches.forEach(i => { seq[i].pos = seq[i - n].pos; });
+  audMatches.forEach(i => { seq[i].letter = seq[i - n].letter; });
+  return seq;
+}
+
+function clearCells() {
+  document.querySelectorAll('.cell').forEach(c => c.classList.remove('active'));
+}
+
+function enableBtns(on) {
+  if (on) {
+    posBtn.classList.remove('disabled-state');
+    audBtn.classList.remove('disabled-state');
+  } else {
+    posBtn.classList.add('disabled-state');
+    audBtn.classList.add('disabled-state');
+  }
+}
+
+function showTrial() {
+  if (trial >= TRIALS) { endRound(); return; }
+  const cur = sequence[trial];
+  const isPosMatch = trial >= n && sequence[trial - n].pos === cur.pos;
+  const isAudMatch = trial >= n && sequence[trial - n].letter === cur.letter;
+  posPressed = false;
+  audPressed = false;
+  posBtn.className = 'resp-btn' + (trial < n ? ' disabled-state' : '');
+  audBtn.className = 'resp-btn' + (trial < n ? ' disabled-state' : '');
+  feedback.textContent = '';
+  trialInfo.textContent = 'Trial ' + (trial + 1) + ' / ' + TRIALS;
+  const cell = $('c' + cur.pos);
+  cell.classList.add('active');
+  letterEl.classList.remove('blank');
+  letterEl.textContent = cur.letter;
+  speak(cur.letter);
+  const activeDuration = trialMs - BLANK_MS;
+  timer = setTimeout(() => {
+    clearCells();
+    letterEl.classList.add('blank');
+    enableBtns(false);
+    if (trial >= n) {
+      const posFalseAlarm = !isPosMatch && posPressed;
+      const audFalseAlarm = !isAudMatch && audPressed;
+      if (isPosMatch) { posTotal++; if (posPressed) posCorrect++; }
+      if (posFalseAlarm) posTotal++;
+      if (isAudMatch) { audTotal++; if (audPressed) audCorrect++; }
+      if (audFalseAlarm) audTotal++;
+      updateScores();
+    }
+    trial++;
+    timer = setTimeout(showTrial, BLANK_MS);
+  }, activeDuration);
+}
+
+function updateScores() {
+  posScore.textContent = posTotal > 0 ? Math.round(posCorrect / posTotal * 100) + '%' : '—';
+  audScore.textContent = audTotal > 0 ? Math.round(audCorrect / audTotal * 100) + '%' : '—';
+}
+
+function endRound() {
+  running = false;
+  clearCells();
+  letterEl.classList.add('blank');
+  enableBtns(false);
+  startBtn.textContent = 'Play again';
+  startBtn.classList.remove('disabled-state');
+  lvlUp.disabled = false;
+  lvlDown.disabled = n <= 1;
+  speedSlider.disabled = false;
+  $('speed-row').classList.remove('hidden');
+  const posP = posTotal > 0 ? Math.round(posCorrect / posTotal * 100) : 0;
+  const audP = audTotal > 0 ? Math.round(audCorrect / audTotal * 100) : 0;
+  const avg = Math.round((posP + audP) / 2);
+  let msg = '';
+  if (avg >= 80 && n < 6) {
+    n++; levelLabel.textContent = n + '-back';
+    msg = avg + '% — level up! Now at ' + n + '-back.';
+  } else if (avg < 50 && n > 1) {
+    n--; levelLabel.textContent = n + '-back';
+    msg = avg + '% — dropping to ' + n + '-back.';
+  } else if (avg >= 80) {
+    msg = avg + '% avg — excellent! Already at max level.';
+  } else if (avg >= 60) {
+    msg = avg + '% avg — solid. Stay at ' + n + '-back.';
+  } else {
+    msg = avg + '% avg — keep going, you\'ll get there.';
+  }
+  feedback.textContent = msg;
+  trialInfo.textContent = '';
+}
+
+function startRound() {
+  if (timer) { clearTimeout(timer); timer = null; }
+  sequence = buildSequence();
+  trial = 0;
+  posCorrect = 0; audCorrect = 0; posTotal = 0; audTotal = 0;
+  posScore.textContent = '—';
+  audScore.textContent = '—';
+  running = true;
+  feedback.textContent = '';
+  startBtn.classList.add('disabled-state');
+  lvlUp.disabled = true;
+  lvlDown.disabled = true;
+  speedSlider.disabled = true;
+  $('speed-row').classList.add('hidden');
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(' ');
+    if (preferredVoice) u.voice = preferredVoice;
+    u.volume = 0;
+    u.onend = () => { timer = setTimeout(showTrial, 300); };
+    window.speechSynthesis.speak(u);
+  } else {
+    showTrial();
+  }
+}
+
+function handlePosPress() {
+  if (!running || posPressed || trial < n) return;
+  posPressed = true;
+  const isMatch = sequence[trial - n] && sequence[trial - n].pos === sequence[trial].pos;
+  posBtn.className = 'resp-btn ' + (isMatch ? 'hit' : 'miss');
+  beep(isMatch);
+}
+
+function handleAudPress() {
+  if (!running || audPressed || trial < n) return;
+  audPressed = true;
+  const isMatch = sequence[trial - n] && sequence[trial - n].letter === sequence[trial].letter;
+  audBtn.className = 'resp-btn ' + (isMatch ? 'hit' : 'miss');
+  beep(isMatch);
+}
+
+posBtn.addEventListener('touchstart', e => { e.preventDefault(); handlePosPress(); }, { passive: false });
+audBtn.addEventListener('touchstart', e => { e.preventDefault(); handleAudPress(); }, { passive: false });
+posBtn.addEventListener('click', handlePosPress);
+audBtn.addEventListener('click', handleAudPress);
+startBtn.addEventListener('touchstart', e => { e.preventDefault(); if (!running) startRound(); }, { passive: false });
+startBtn.addEventListener('click', () => { if (!running) startRound(); });
+
+lvlUp.addEventListener('click', () => {
+  if (n < 6) { n++; levelLabel.textContent = n + '-back'; }
+  lvlDown.disabled = n <= 1;
+  lvlUp.disabled = n >= 6;
+});
+
+lvlDown.addEventListener('click', () => {
+  if (n > 1) { n--; levelLabel.textContent = n + '-back'; }
+  lvlDown.disabled = n <= 1;
+  lvlUp.disabled = n >= 6;
+});
+
+$('fs-btn').addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+});
+</script>
+</body>
+</html>
