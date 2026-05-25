@@ -140,7 +140,6 @@
     touch-action: manipulation;
   }
   .resp-btn .btn-sub { font-size: 10px; color: var(--muted); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
-  .resp-btn.pressed { transform: scale(0.95); background: var(--surface2); }
   .resp-btn.hit { background: rgba(46,204,113,0.18); border-color: var(--accent2); color: var(--accent2); }
   .resp-btn.hit .btn-sub { color: var(--accent2); opacity: 0.7; }
   .resp-btn.miss { background: rgba(231,76,60,0.15); border-color: var(--danger); color: var(--danger); }
@@ -241,6 +240,7 @@ const BLANK_MS = 400;
 const TRIALS = 20;
 const SPEED_DURATIONS = [3500, 3000, 2500, 2000, 1500];
 const SPEED_LABELS = ['Slow', 'Easy', 'Normal', 'Fast', 'Hard'];
+const MIN_MATCH_GAP = 2;
 
 let n = 2;
 let speedIdx = 2;
@@ -342,6 +342,24 @@ function shuffle(arr) {
   return arr;
 }
 
+function placeMatchesWithGap(eligible, count, minGap) {
+  const placed = [];
+  const available = shuffle([...eligible]);
+  for (const idx of available) {
+    if (placed.length >= count) break;
+    const tooClose = placed.some(p => Math.abs(p - idx) < minGap);
+    if (!tooClose) placed.push(idx);
+  }
+  // Relax gap if we couldn't place enough
+  if (placed.length < count) {
+    for (const idx of available) {
+      if (placed.length >= count) break;
+      if (!placed.includes(idx)) placed.push(idx);
+    }
+  }
+  return placed;
+}
+
 function buildSequence() {
   const seq = [];
   for (let i = 0; i < TRIALS; i++) {
@@ -353,8 +371,8 @@ function buildSequence() {
   const eligible = [];
   for (let i = n; i < TRIALS; i++) eligible.push(i);
   const matchCount = Math.round(eligible.length * 0.3);
-  const posMatches = shuffle([...eligible]).slice(0, matchCount);
-  const audMatches = shuffle([...eligible]).slice(0, matchCount);
+  const posMatches = placeMatchesWithGap(eligible, matchCount, MIN_MATCH_GAP + n);
+  const audMatches = placeMatchesWithGap(eligible, matchCount, MIN_MATCH_GAP + n);
   posMatches.forEach(i => { seq[i].pos = seq[i - n].pos; });
   audMatches.forEach(i => { seq[i].letter = seq[i - n].letter; });
   return seq;
@@ -387,13 +405,10 @@ function showTrial() {
   trialInfo.textContent = 'Trial ' + (trial + 1) + ' / ' + TRIALS;
   const cell = $('c' + cur.pos);
   cell.classList.add('active');
-  letterEl.classList.remove('blank');
-  letterEl.textContent = cur.letter;
   speak(cur.letter);
   const activeDuration = trialMs - BLANK_MS;
   timer = setTimeout(() => {
     clearCells();
-    letterEl.classList.add('blank');
     enableBtns(false);
     if (trial >= n) {
       const posFalseAlarm = !isPosMatch && posPressed;
@@ -417,7 +432,6 @@ function updateScores() {
 function endRound() {
   running = false;
   clearCells();
-  letterEl.classList.add('blank');
   enableBtns(false);
   startBtn.textContent = 'Play again';
   startBtn.classList.remove('disabled-state');
@@ -460,12 +474,19 @@ function startRound() {
   lvlDown.disabled = true;
   speedSlider.disabled = true;
   $('speed-row').classList.add('hidden');
+
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(' ');
     if (preferredVoice) u.voice = preferredVoice;
     u.volume = 0;
-    u.onend = () => { timer = setTimeout(showTrial, 300); };
+    let started = false;
+    const fallback = setTimeout(() => {
+      if (!started) { started = true; timer = setTimeout(showTrial, 100); }
+    }, 800);
+    u.onend = () => {
+      if (!started) { started = true; clearTimeout(fallback); timer = setTimeout(showTrial, 300); }
+    };
     window.speechSynthesis.speak(u);
   } else {
     showTrial();
@@ -508,11 +529,8 @@ lvlDown.addEventListener('click', () => {
 });
 
 $('fs-btn').addEventListener('click', () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {});
-  } else {
-    document.exitFullscreen();
-  }
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  else document.exitFullscreen();
 });
 </script>
 </body>
